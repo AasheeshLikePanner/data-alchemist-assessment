@@ -10,6 +10,7 @@ const model = genAI.getGenerativeModel({
     },
   ],
 });
+console.log(process.env.GOOGLE_GEMINI_API);
 
 
 export async function POST(req: Request): Promise<Response> {

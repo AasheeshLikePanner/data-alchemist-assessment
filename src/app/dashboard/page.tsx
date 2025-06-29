@@ -595,13 +595,13 @@ const Dashboard = () => {
     const aiResponse = JSON.parse(jsonString);
     return aiResponse;
   };
-
   const autoFixErrors = useCallback(async () => {
     setError(null);
     if (validationErrors.filter(e => !e.fixed).length === 0) {
       toast.error('No errors to fix.');
       return;
     }
+
 
     setIsFixingWithAI(true); 
 
