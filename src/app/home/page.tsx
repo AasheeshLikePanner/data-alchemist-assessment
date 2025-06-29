@@ -35,7 +35,7 @@ const UploadComponent: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
 
   const normalizeSheetName = (name: string): string => {
-    return name.toLowerCase().replace(/[^a-z]/g, '')
+    return name.toLowerCase().replace(/[^a-z0-9]/g, '')
   }
 
   const matchSheetToEntity = (sheetName: string): string | null => {
@@ -48,25 +48,28 @@ const UploadComponent: React.FC = () => {
     return null
   }
 
-  const parseCSV = (content: string): any[] => {
+  const parseCSV = (content: string): { data: any[]; headers: string[] } => {
     const lines = content.split('\n').filter(line => line.trim())
-    if (lines.length < 2) return []
-    
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+    if (lines.length < 1) return { data: [], headers: [] }
+
+    // Regex to split CSV line by comma, but not if comma is inside double quotes
+    const csvSplitRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+
+    const headers = lines[0].split(csvSplitRegex).map(h => h.trim().replace(/^"|"$/g, ''))
     const data = lines.slice(1).map(line => {
-      const values = line.split(',').map(v => v.trim().replace(/"/g, ''))
+      const values = line.split(csvSplitRegex).map(v => v.trim().replace(/^"|"$/g, ''))
       const obj: any = {}
       headers.forEach((header, index) => {
         obj[header] = values[index] || ''
       })
       return obj
     })
-    
-    return data
+
+    return { data, headers }
   }
 
   const processFile = async (file: File): Promise<void> => {
-    // Clear previous state
+    
     setUploadedFile({
       filename: file.name,
       entity: '',
@@ -84,19 +87,43 @@ const UploadComponent: React.FC = () => {
 
       if (fileExtension === 'csv') {
         const content = await file.text()
-        const data = parseCSV(content)
+        const { data, headers } = parseCSV(content)
         
         if (data.length === 0) {
           throw new Error('CSV file is empty or invalid')
         }
 
-        let entityType = ''
-        if (!uploadedEntities.clients) entityType = 'clients'
-        else if (!uploadedEntities.workers) entityType = 'workers'
-        else if (!uploadedEntities.tasks) entityType = 'tasks'
-        
+        let entityType: string | null = null
+        const normalizedHeaders = headers.map(h => normalizeSheetName(h))
+
+        const clientKeywords = ['client', 'customer', 'account', 'company']
+        const workerKeywords = ['worker', 'employee', 'staff', 'personnel', 'agent']
+        const taskKeywords = ['task', 'project', 'activity', 'job', 'assignment']
+
+        const hasClientHeaders = clientKeywords.some(keyword =>
+          normalizedHeaders.some(h => h.includes(keyword))
+        )
+        const hasWorkerHeaders = workerKeywords.some(keyword =>
+          normalizedHeaders.some(h => h.includes(keyword))
+        )
+        const hasTaskHeaders = taskKeywords.some(keyword =>
+          normalizedHeaders.some(h => h.includes(keyword))
+        )
+
+        if (hasClientHeaders) {
+          entityType = 'clients'
+        } else if (hasWorkerHeaders) {
+          entityType = 'workers'
+        } else if (hasTaskHeaders) {
+          entityType = 'tasks'
+        }
+
         if (!entityType) {
-          throw new Error('All entities already uploaded')
+          throw new Error('Could not determine entity type from CSV headers. Please ensure headers contain keywords like "client", "worker", or "task".')
+        }
+
+        if (uploadedEntities[entityType as keyof UploadedEntity]) {
+          throw new Error(`Entity type "${entityType}" already uploaded.`)
         }
 
         localStorage.setItem(`upload:${entityType}`, JSON.stringify(data))
@@ -109,7 +136,7 @@ const UploadComponent: React.FC = () => {
 
         setUploadedEntities(prev => ({
           ...prev,
-          [entityType]: true
+          [entityType as keyof UploadedEntity]: true
         }))
 
       } else if (fileExtension === 'xlsx') {

@@ -1,0 +1,51 @@
+TaskID,TaskName,Category,Duration,RequiredSkills,PreferredPhases,MaxConcurrent
+T1,Data Cleanup,ETL,2,coding,1  -  2,3
+T2,Report Generation,Analytics,1,"analysis,reporting","[2,3,4]",2
+T3,Model Training,ML,3,"ml,coding",3  -  5,1
+T4,UI Prototype,Design,2,design,"[1,2]",2
+T5,Load Testing,QA,1,testing,2  -  3,2
+T6,Feature Engineering,ML,4,"data,ml",2 - 5,1
+T7,A/B Testing,Analytics,2,"testing,analysis","[1,3]",2
+T8,Dashboard Build,Design,3,"ui/ux,data",3 - 4,2
+T9,Code Review,QA,1,"coding,testing","[2,3]",3
+T10,API Development,ETL,3,"coding,devops",1 - 3,2
+T11,Bug Fixing,QA,2,"testing,coding","[2,4]",4
+T12,Security Audit,Security,3,"devops,testing","[1,2,3]",1
+T13,Performance Tuning,QA,2,"coding,devops",3 - 5,2
+T14,Data Migration,ETL,4,"data,devops",1 - 4,1
+T15,Infrastructure Setup,Infrastructure,5,devops,"[1,2,3]",2
+T16,User Testing,QA,2,"testing,ui/ux","[4,5]",3
+T17,Documentation,Writing,1,reporting,"[1,2]",2
+T18,Code Refactoring,QA,3,coding,2 - 4,2
+T19,Market Analysis,Analytics,3,analysis,"[3,5]",2
+T20,Customer Interview,Research,1,reporting,[2],1
+T21,Data Visualization,Analytics,2,"ui/ux,data",1 - 3,3
+T22,Experiment Setup,ML,3,"ml,data","[2,3,4]",1
+T23,Regression Testing,QA,2,testing,3 - 5,2
+T24,Load Balancing,DevOps,4,devops,"[1,2]",1
+T25,UX Research,Design,3,"ui/ux,analysis","[3,4]",2
+T26,Prototype Assembly,Design,2,design,1 - 2,3
+T27,Deployment,DevOps,1,devops,[1],2
+T28,Backup Configuration,DevOps,2,devops,"[2,3]",1
+T29,Data Labeling,ML,2,data,"[4,5]",3
+T30,Model Evaluation,ML,3,ml,1 - 2,1
+T31,Logging Setup,Infrastructure,1,devops,[2],2
+T32,Sanity Check,QA,1,testing,[1],3
+T33,Integration Testing,QA,3,"testing,coding",2 - 4,2
+T34,Stress Testing,QA,4,testing,3 - 5,1
+T35,Penetration Testing,Security,3,"testing,devops","[1,2]",1
+T36,Content Writing,Writing,2,reporting,[2 - 4],2
+T37,Graphic Design,Design,2,design,[3],2
+T38,Video Editing,Design,3,design,[1 - 3],1
+T39,SEO Optimization,Marketing,2,reporting,"[4,5]",2
+T40,Social Media Plan,Marketing,3,"reporting,ui/ux","[2,4]",2
+T41,Campaign Analysis,Analytics,2,analysis,[3],1
+T42,Sales Presentation,Sales,1,"reporting,design",[1],2
+T43,Budget Forecast,Analytics,2,analysis,1 - 2,1
+T44,Risk Assessment,Compliance,3,"analysis,testing","[2,3]",1
+T45,Compliance Check,Compliance,1,analysis,[4],2
+T46,Quality Assurance,QA,2,testing,"[1,2]",3
+T47,Crosswalk Analysis,Analytics,3,"analysis,data","[3,5]",1
+T48,Database Optimization,Infrastructure,4,"data,devops",1 - 3,2
+T49,Cloud Migration,DevOps,5,"devops,data",[2 - 5],1
+T50,Disaster Recovery,Infrastructure,4,"devops,data",[1 - 2],2

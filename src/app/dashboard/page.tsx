@@ -277,8 +277,8 @@ const Dashboard = () => {
   }, []);
 
   const validateAllData = useCallback(async (currentSheets: Record<EntityType, SheetData>) => {
-    setValidationProgress(0); // Reset progress at the start of validation
-    const totalValidationSteps = 6; // Estimate of major validation steps
+    setValidationProgress(0); 
+    const totalValidationSteps = 6;
     let completedSteps = 0;
     const allErrors: ValidationError[] = [];
     const createError = (entity: EntityType, rowIndex: number, field: string, message: string, level: ValidationLevel = 'error') => ({
@@ -424,7 +424,7 @@ const Dashboard = () => {
     setValidationProgress(Math.round((completedSteps / totalValidationSteps) * 100));
 
     setValidationErrors(allErrors);
-    setValidationProgress(100); // Validation complete
+    setValidationProgress(100); 
   }, [rules, validateRow]);
 
   useEffect(() => {
@@ -586,10 +586,7 @@ const Dashboard = () => {
       throw new Error(`API call failed with status: ${response.status}`);
     }
 
-    // Assuming the backend returns { summary: "{"fixes": [...]}" }
-    // We need to parse the summary string to get the actual JSON object
     let jsonString = response.data.summary;
-    // Attempt to extract JSON from markdown code block
     const match = jsonString.match(/```json\n([\s\S]*?)\n```/);
     if (match && match[1]) {
       jsonString = match[1];
@@ -606,7 +603,7 @@ const Dashboard = () => {
       return;
     }
 
-    setIsFixingWithAI(true); // Start loading
+    setIsFixingWithAI(true); 
 
     try {
       const prompt = `You are an AI assistant that helps fix data validation errors. Your task is to analyze the provided data and validation errors, and then suggest fixes in a strict JSON format. 
@@ -656,7 +653,6 @@ const Dashboard = () => {
             const keyToUpdate = Object.keys(item).find(k => normalizeFieldName(k) === normalizeFieldName(field)) || field;
             item[keyToUpdate] = newValue;
 
-            // Mark the corresponding error as fixed
             const errorId = validationErrors.find(e =>
               e.entity === entity &&
               e.rowIndex === rowIndex &&
@@ -670,7 +666,6 @@ const Dashboard = () => {
         });
 
         setSheets(newSheets);
-        // Re-validate data after applying fixes
         await validateAllData(newSheets);
 
         toast.success('Fixes applied. Re-validating data...');
@@ -681,7 +676,7 @@ const Dashboard = () => {
       console.error('AI auto-fix failed:', err);
       toast.error(`AI auto-fix failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
-      setIsFixingWithAI(false); // End loading
+      setIsFixingWithAI(false); 
     }
   }, [sheets, validateAllData, getNormalizedValue, parseArrayString]);
 
