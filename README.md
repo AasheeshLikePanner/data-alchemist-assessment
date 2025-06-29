@@ -11,7 +11,7 @@ npm install
 
 2. **Add your Gemini API key**
 
-Create a `.env.local` file in the root directory and add:
+Create a `.env` file in the root directory and add:
 
 ```env
 GEMINI_API_KEY=your-api-key-here
