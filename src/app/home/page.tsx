@@ -6,139 +6,241 @@ import * as XLSX from 'xlsx'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Upload, File, CheckCircle, XCircle } from 'lucide-react'
+import { Upload, File, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 
-type EntityType = 'clients' | 'workers' | 'tasks'
+interface FileUploadState {
+  filename: string
+  entity: string
+  status: 'waiting' | 'processing' | 'done' | 'error'
+  error?: string
+  sheets?: string[]
+}
+
+interface UploadedEntity {
+  clients: boolean
+  workers: boolean
+  tasks: boolean
+}
 
 const UploadComponent: React.FC = () => {
   const router = useRouter()
-  const [file, setFile] = useState<{
-    name: string
-    status: 'waiting' | 'processing' | 'done' | 'error'
-    error?: string
-    foundSheets?: Partial<Record<EntityType, boolean>>
-  } | null>(null)
+  const [uploadedFile, setUploadedFile] = useState<FileUploadState | null>(null)
+  const [uploadedEntities, setUploadedEntities] = useState<UploadedEntity>({
+    clients: false,
+    workers: false,
+    tasks: false
+  })
   const [dragActive, setDragActive] = useState(false)
+  const [missingSheets, setMissingSheets] = useState<string[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  const normalizeSheetName = (name: string): string => {
+    return name.toLowerCase().replace(/[^a-z]/g, '')
+  }
+
+  const matchSheetToEntity = (sheetName: string): string | null => {
+    const normalized = normalizeSheetName(sheetName)
+    
+    if (normalized.includes('client')) return 'clients'
+    if (normalized.includes('worker')) return 'workers'
+    if (normalized.includes('task')) return 'tasks'
+    
+    return null
+  }
+
+  const parseCSV = (content: string): any[] => {
+    const lines = content.split('\n').filter(line => line.trim())
+    if (lines.length < 2) return []
+    
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+    const data = lines.slice(1).map(line => {
+      const values = line.split(',').map(v => v.trim().replace(/"/g, ''))
+      const obj: any = {}
+      headers.forEach((header, index) => {
+        obj[header] = values[index] || ''
+      })
+      return obj
+    })
+    
+    return data
+  }
+
+  const processFile = async (file: File): Promise<void> => {
+    // Clear previous state
+    setUploadedFile({
+      filename: file.name,
+      entity: '',
+      status: 'processing'
+    })
+    setError(null)
+    setMissingSheets([])
+
+    try {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase()
+      
+      if (!['csv', 'xlsx'].includes(fileExtension || '')) {
+        throw new Error('Only CSV and XLSX files are supported')
+      }
+
+      if (fileExtension === 'csv') {
+        const content = await file.text()
+        const data = parseCSV(content)
+        
+        if (data.length === 0) {
+          throw new Error('CSV file is empty or invalid')
+        }
+
+        let entityType = ''
+        if (!uploadedEntities.clients) entityType = 'clients'
+        else if (!uploadedEntities.workers) entityType = 'workers'
+        else if (!uploadedEntities.tasks) entityType = 'tasks'
+        
+        if (!entityType) {
+          throw new Error('All entities already uploaded')
+        }
+
+        localStorage.setItem(`upload:${entityType}`, JSON.stringify(data))
+        
+        setUploadedFile({
+          filename: file.name,
+          entity: entityType,
+          status: 'done'
+        })
+
+        setUploadedEntities(prev => ({
+          ...prev,
+          [entityType]: true
+        }))
+
+      } else if (fileExtension === 'xlsx') {
+        const arrayBuffer = await file.arrayBuffer()
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+        
+        const sheetNames = workbook.SheetNames
+        const foundEntities: { [key: string]: any[] } = {}
+        const foundSheets: string[] = []
+        
+        for (const sheetName of sheetNames) {
+          const entity = matchSheetToEntity(sheetName)
+          if (entity) {
+            const worksheet = workbook.Sheets[sheetName]
+            const jsonData = XLSX.utils.sheet_to_json(worksheet)
+            foundEntities[entity] = jsonData
+            foundSheets.push(`${sheetName} → ${entity}`)
+            localStorage.setItem(`upload:${entity}`, JSON.stringify(jsonData))
+          }
+        }
+
+        const requiredEntities = ['clients', 'workers', 'tasks']
+        const missing = requiredEntities.filter(entity => !foundEntities[entity])
+        
+        if (missing.length > 0) {
+          setMissingSheets(missing)
+          throw new Error(`Missing required sheets: ${missing.join(', ')}`)
+        }
+
+        setUploadedFile({
+          filename: file.name,
+          entity: 'All entities',
+          status: 'done',
+          sheets: foundSheets
+        })
+
+        setUploadedEntities({
+          clients: true,
+          workers: true,
+          tasks: true
+        })
+      }
+
+    } catch (err) {
+      const error = err as Error
+      console.error('File processing error:', error)
+      setError(error.message)
+      setUploadedFile({
+        filename: file.name,
+        entity: '',
+        status: 'error',
+        error: error.message
+      })
+    }
+  }
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setDragActive(e.type === 'dragenter' || e.type === 'dragover')
-  }, [])
-
-  const processFile = useCallback(async (file: File) => {
-    setFile({
-      name: file.name,
-      status: 'processing',
-      error: undefined,
-      foundSheets: {},
-    });
-
-    try {
-      const fileExtension = file.name.split('.').pop()?.toLowerCase();
-      if (!['xlsx', 'csv'].includes(fileExtension || '')) {
-        throw new Error('Only XLSX or CSV files are supported');
-      }
-
-      const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-
-      const sheetData: Partial<Record<EntityType, any[]>> = {};
-      const foundSheets: Partial<Record<EntityType, boolean>> = {};
-
-      const detectEntityTypeFromSheet = (name: string): EntityType | null => {
-        const normalized = name.toLowerCase();
-        if (normalized.includes('client')) return 'clients';
-        if (normalized.includes('worker')) return 'workers';
-        if (normalized.includes('task')) return 'tasks';
-        return null;
-      };
-
-      for (const sheetName of workbook.SheetNames) {
-        const entityType = detectEntityTypeFromSheet(sheetName);
-        if (entityType && !sheetData[entityType]) {
-          const worksheet = workbook.Sheets[sheetName];
-          const data = XLSX.utils.sheet_to_json(worksheet);
-          if (data.length > 0) {
-            sheetData[entityType] = data;
-            foundSheets[entityType] = true;
-          }
-        }
-      }
-      
-      setFile(prev => ({ ...prev!, name: file.name, status: 'processing', foundSheets }));
-
-      const requiredEntities: EntityType[] = ['clients', 'workers', 'tasks'];
-      const missingEntities = requiredEntities.filter(e => !foundSheets[e]);
-
-      if (missingEntities.length > 0) {
-        throw new Error(`Missing or empty required sheets: ${missingEntities.join(', ')}`);
-      }
-
-      requiredEntities.forEach(entity => localStorage.removeItem(`upload:${entity}`));
-      for (const entity of requiredEntities) {
-        localStorage.setItem(`upload:${entity}`, JSON.stringify(sheetData[entity]));
-      }
-
-      setFile({
-        name: file.name,
-        status: 'done',
-        foundSheets,
-      });
-
-    } catch (err) {
-      const error = err as Error;
-      setFile(prev => ({
-        ...(prev || { name: file.name }),
-        status: 'error',
-        error: error.message,
-        foundSheets: prev?.foundSheets || {}
-      }));
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
     }
-  }, []);
+  }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setDragActive(false)
-    if (e.dataTransfer.files.length > 0) {
-      processFile(e.dataTransfer.files[0])
+
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      processFile(files[0])
     }
-  }, [processFile])
+  }, [])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      processFile(e.target.files[0])
+    const files = e.target.files
+    if (files && files.length > 0) {
+      processFile(files[0])
+    }
+    e.target.value = ''
+  }
+
+  const clearLocalStorage = () => {
+    ['clients', 'workers', 'tasks'].forEach(entity => {
+      localStorage.removeItem(`upload:${entity}`)
+    })
+    setUploadedEntities({
+      clients: false,
+      workers: false,
+      tasks: false
+    })
+    setUploadedFile(null)
+    setError(null)
+  }
+
+  const allEntitiesUploaded = uploadedEntities.clients && uploadedEntities.workers && uploadedEntities.tasks
+
+  const handleProceed = () => {
+    if (allEntitiesUploaded) {
+      router.push('/dashboard')
     }
   }
 
-  const clearFile = () => {
-    ['clients', 'workers', 'tasks'].forEach(entity => {
-      localStorage.removeItem(`upload:${entity}`);
-    });
-    setFile(null)
-  }
-
-  const proceedToDashboard = () => {
-    router.push('/dashboard')
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'done': return <CheckCircle className="w-5 h-5 text-green-500" />
+      case 'error': return <XCircle className="w-5 h-5 text-red-500" />
+      case 'processing': return <AlertCircle className="w-5 h-5 text-yellow-500 animate-pulse" />
+      default: return <File className="w-5 h-5 text-gray-400" />
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-white border border-gray-200 shadow-sm">
-        <CardHeader className="text-center space-y-1">
-          <CardTitle className="text-xl font-medium text-gray-800">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <Card className="w-full max-w-md bg-white border-gray-200 shadow-sm">
+        <CardHeader className="text-center space-y-2">
+          <CardTitle className="text-2xl font-medium text-gray-900">
             Upload Data File
           </CardTitle>
           <p className="text-gray-500 text-sm">
-            Upload a single XLSX/CSV file with sheets for clients, workers, and tasks.
+            Upload a single CSV or XLSX file containing your data
           </p>
         </CardHeader>
-
+        
         <CardContent className="space-y-4">
           <div
             className={`
-              border-2 border-dashed rounded-lg p-6 text-center transition-colors
+              border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200
               ${dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
             `}
             onDragEnter={handleDrag}
@@ -146,77 +248,106 @@ const UploadComponent: React.FC = () => {
             onDragOver={handleDrag}
             onDrop={handleDrop}
           >
-            <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-gray-700 text-sm mb-3">
-              {file ? 'File ready' : 'Drag & drop file here'}
+            <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-700 mb-1">
+              Drag and drop file here
+            </p>
+            <p className="text-gray-500 text-sm mb-3">
+              or
             </p>
             
             <input
               type="file"
-              id="file-upload"
               accept=".csv,.xlsx"
               onChange={handleFileSelect}
               className="hidden"
+              id="file-upload"
             />
-            <label
-              htmlFor="file-upload"
-              className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+            <Button
+              variant="outline"
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              onClick={() => document.getElementById('file-upload')?.click()}
             >
-              {file ? 'Replace File' : 'Select File'}
-            </label>
+              Select File
+            </Button>
+            <p className="text-gray-400 text-xs mt-3">
+              Supports .csv and .xlsx files (max 5MB)
+            </p>
           </div>
 
-          {file?.error && (
+          {(error || missingSheets.length > 0) && (
             <Alert variant="destructive" className="bg-red-50 border-red-200">
               <XCircle className="h-4 w-4 text-red-500" />
-              <AlertDescription className="text-red-700 text-sm">
-                {file.error}
+              <AlertDescription className="text-red-700">
+                {error || `Missing required sheets: ${missingSheets.join(', ')}`}
               </AlertDescription>
             </Alert>
           )}
 
-          {file && (
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="flex items-center space-x-2">
-                {file.status === 'done' ? (
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                ) : file.status === 'error' ? (
-                  <XCircle className="h-5 w-5 text-red-500" />
-                ) : (
-                  <File className="h-5 w-5 text-gray-400" />
-                )}
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{file.name}</p>
-                  {file.foundSheets && Object.keys(file.foundSheets).length > 0 && (
-                    <p className="text-xs text-gray-500">
-                      Found: {Object.keys(file.foundSheets).join(', ')}
-                    </p>
+          <div className="grid grid-cols-3 gap-3">
+            {(['clients', 'workers', 'tasks'] as const).map((entity) => (
+              <div
+                key={entity}
+                className={`
+                  p-3 rounded-lg border text-center transition-all
+                  ${uploadedEntities[entity]
+                    ? 'bg-green-50 border-green-200 text-green-700'
+                    : 'bg-gray-50 border-gray-200 text-gray-500'
+                  }
+                `}
+              >
+                <div className="flex items-center justify-center mb-1">
+                  {uploadedEntities[entity] ? (
+                    <CheckCircle className="w-4 h-4" />
+                  ) : (
+                    <div className="w-4 h-4 rounded-full border-2 border-current" />
                   )}
                 </div>
+                <span className="text-sm font-medium capitalize">{entity}</span>
               </div>
-              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                file.status === 'done' ? 'bg-green-100 text-green-800' :
-                file.status === 'error' ? 'bg-red-100 text-red-800' :
-                'bg-yellow-100 text-yellow-800'
-              }`}>
-                {file.status}
-              </span>
+            ))}
+          </div>
+
+          {uploadedFile && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-gray-700">Uploaded File</h3>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center space-x-3">
+                  {getStatusIcon(uploadedFile.status)}
+                  <div>
+                    <p className="text-gray-900 font-medium">{uploadedFile.filename}</p>
+                    {uploadedFile.entity && (
+                      <p className="text-gray-500 text-sm">Contains: {uploadedFile.entity}</p>
+                    )}
+                    {uploadedFile.error && (
+                      <p className="text-red-500 text-sm">{uploadedFile.error}</p>
+                    )}
+                  </div>
+                </div>
+                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                  uploadedFile.status === 'done' ? 'bg-green-100 text-green-800' :
+                  uploadedFile.status === 'error' ? 'bg-red-100 text-red-800' :
+                  'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {uploadedFile.status}
+                </span>
+              </div>
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-3 pt-2">
             <Button
+              onClick={clearLocalStorage}
               variant="outline"
               className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
-              onClick={clearFile}
-              disabled={!file}
+              disabled={!uploadedFile}
             >
               Clear
             </Button>
             <Button
+              onClick={handleProceed}
               className="flex-1 bg-blue-600 hover:bg-blue-700"
-              onClick={proceedToDashboard}
-              disabled={!file || file.status !== 'done'}
+              disabled={!allEntitiesUploaded}
             >
               Proceed
             </Button>
